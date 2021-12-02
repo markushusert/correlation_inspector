@@ -2,6 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import math
 import datetime
+import sys
+g_in_jupyter='ipykernel' in sys.modules
 class correlation_inspector:
     def on_key_press(self,event):
         if event.key==self.inspectkey:
@@ -13,17 +15,20 @@ class correlation_inspector:
             self.key_pressed=False
         #self.msg(f"key released {event.key}, looking for {self.inspectkey}, {self.key_pressed}")
     def msg(self,txt):
-        if self.text:
-            self.text.set_text(txt)
+        if g_in_jupyter:
+            if self.text:
+                self.text.set_text(txt)
+            else:
+                self.text=self.matshow_ax.text(1,1,txt)
         else:
-            self.text=self.matshow_ax.text(1,1,txt)
+            print(txt)
     def onclick(self,event):
         
         msg=f"key_pressed:{self.key_pressed},time{datetime.datetime.now()}"
         #self.msg(msg)
         if self.key_pressed:
-            xdat=math.floor(event.xdata)
-            ydat=math.floor(event.ydata)
+            xdat=int(round(event.xdata))
+            ydat=int(round(event.ydata))
             self.plot_scatter(xdat,ydat)
     def __init__(self,data,fields,inspectkey="control"):
         self.data=data
@@ -33,18 +38,21 @@ class correlation_inspector:
         self.inspectkey=inspectkey
         self.key_pressed=False
         self.figure,self.matshow_ax,self.scatter_ax=self.create_interactive_correlation_fig()
-        #self.figure.show() only show when not in jupyter
+        if not g_in_jupyter:
+            self.figure.show()
         #self.msg(f"looking for {self.inspectkey}")
     def calc_correl(self):
         return np.corrcoef(self.data)
     def plot_scatter(self,xdat,ydat):
+        
         self.scatter_ax.clear()
         name_x=self.fields[xdat]
         name_y=self.fields[ydat]
         self.scatter_ax.scatter(self.data[xdat,:],self.data[ydat,:])
-        self.scatter_ax.set_xlabel(name_x)
-        self.scatter_ax.set_ylabel(name_y)
-    
+        #self.msg(f"printing x,{xdat} vs y,{ydat}")
+        self.scatter_ax.set_xlabel(f"{name_x}, row:{xdat}")
+        self.scatter_ax.set_ylabel(f"{name_y}, row:{ydat}")
+
     def create_interactive_correlation_fig(self):
         #create figure
         fig=plt.figure(constrained_layout=True)
