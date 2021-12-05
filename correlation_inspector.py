@@ -3,9 +3,12 @@ import matplotlib.pyplot as plt
 import math
 import datetime
 import sys
+import ipywidgets as widgets
+from IPython.display import display
 import glob
 from functools import wraps
 from PIL import Image
+from ipywidgets import interact, interactive, fixed, interact_manual
 
 
 g_in_jupyter='ipykernel' in sys.modules
@@ -22,6 +25,23 @@ def distance(row,point):
     return math.sqrt((row[0]-point[0])**2+(row[1]-point[1])**2)
 
 class correlation_inspector:
+    def __init__(self,data,fields,inspectkey="control",image_path=None):
+        self.data=data
+        self.text=None
+        self.scatter_points=None
+        self.fields=fields
+        self.image_path=image_path
+        self.cor_coef=self.calc_correl()
+        self.inspectkey=inspectkey
+        self.key_pressed=False
+        self.displayed_images=list()
+        self.figure,self.matshow_ax,self.scatter_ax=self.create_interactive_correlation_fig()
+        self.idxs_to_scatter=[None,None]
+        if not g_in_jupyter:
+            self.figure.show()
+        self.display_field_selection_dropdown()
+        #self.msg(f"looking for {self.inspectkey}")
+    
     def on_hover(self,event):
         if event.inaxes is self.scatter_ax:
             scatterpoint_on_hover,coords_hovered_point=self.get_scatter_point_hovered((event.xdata,event.ydata))
@@ -89,15 +109,12 @@ class correlation_inspector:
         else:
             print(txt)
     def clicked_on_correl(self,event):
-    
-        xidx=int(round(event.xdata))
-        yidx=int(round(event.ydata))
-        self.scatter_ax.clear()
-        self.plot_scatter(xidx,yidx)
+        self.idxs_to_scatter[0]=int(round(event.xdata))
+        self.idxs_to_scatter[1]=int(round(event.ydata))
+        self.plot_scatter()
     def clicked_on_scatter(self,event):
-        
         clicked_idx,coords=self.get_scatter_point_hovered((event.xdata,event.ydata))
-        self.msg(f"clicked on scatter,idx={clicked_idx},coords={coords}")
+        #self.msg(f"clicked on scatter,idx={clicked_idx},coords={coords}")
         if clicked_idx:
             self.show_images(clicked_idx)
     def on_click(self,event):
@@ -127,37 +144,44 @@ class correlation_inspector:
         for image_path in images_to_show:
             self.displayed_images.append(Image.open(image_path))
             self.displayed_images[-1].show()
+    
+    def scatter_dropdown_interact_x(self,idx_val,idx_nr):
+        self.idxs_to_scatter[idx_nr]=idx_val
+        self.plot_scatter()
+
+    def create_dropdown_widget(self,idx_nr):
+        axis_to_set="x-axis" if idx_nr==0 else "y-axis"
+        list_tuples_field_and_nr=[(field,nr) for nr,field in enumerate(self.fields)]
+        return widgets.Dropdown(options=list_tuples_field_and_nr,description=f'{axis_to_set}:')
 
 
-    def __init__(self,data,fields,inspectkey="control",image_path=None):
-        self.data=data
-        self.text=None
-        self.scatter_points=None
-        self.fields=fields
-        self.image_path=image_path
-        self.cor_coef=self.calc_correl()
-        self.inspectkey=inspectkey
-        self.key_pressed=False
-        self.displayed_images=list()
-        self.figure,self.matshow_ax,self.scatter_ax=self.create_interactive_correlation_fig()
+    def display_field_selection_dropdown(self):
         if not g_in_jupyter:
-            self.figure.show()
-        #self.msg(f"looking for {self.inspectkey}")
+            return
+        #for both x and y axis
+        for idx_nr in range(2):
+            dropdown_widget=self.create_dropdown_widget(idx_nr)
+            interact(self.scatter_dropdown_interact_x,idx_val=dropdown_widget,idx_nr=fixed(idx_nr))
+            
+
+    
     def calc_correl(self):
         return np.corrcoef(self.data)
-    def plot_scatter(self,xidx,yidx):
+    def plot_scatter(self):
         
         self.scatter_ax.clear()
-        self.msg(f"xidx={xidx},yidx={yidx}")
-        name_x=self.fields[xidx]
-        name_y=self.fields[yidx]
-        xdata=self.data[xidx,:]
-        ydata=self.data[yidx,:]
+        if any(i is None for i in self.idxs_to_scatter):
+            return
+        #self.msg(f"xidx={xidx},yidx={self.idxs_to_scatter[1]}")
+        name_x=self.fields[self.idxs_to_scatter[0]]
+        name_y=self.fields[self.idxs_to_scatter[1]]
+        xdata=self.data[self.idxs_to_scatter[0],:]
+        ydata=self.data[self.idxs_to_scatter[1],:]
         self.scatter_points=self.scatter_ax.scatter(xdata,ydata)
 
         #self.msg(f"printing x,{xdat} vs y,{ydat}")
-        self.scatter_ax.set_xlabel(f"{name_x}, row:{xidx}")
-        self.scatter_ax.set_ylabel(f"{name_y}, row:{yidx}")
+        self.scatter_ax.set_xlabel(f"{name_x}, row:{self.idxs_to_scatter[0]}")
+        self.scatter_ax.set_ylabel(f"{name_y}, row:{self.idxs_to_scatter[1]}")
         self.set_lims(self.scatter_ax,xdata,ydata)
         #self.scatter_ax.draw()
 
