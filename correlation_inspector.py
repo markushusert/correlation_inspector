@@ -240,13 +240,15 @@ class correlation_inspector:
         return pd.DataFrame(
             {
                 "name":self.fields,
-                "idx":[i for i in range(len(self.fields))],
+                #not needed since tabulator provides it
+                #"idx":[i for i in range(len(self.fields))],
                 "max_correl":0.0,
                 "max_idx":0,
                 "max_name":"",
                 "min_correl":0.0,
                 "min_idx":0,
                 "min_name":"",
+                "max_abs_correl":0.0,
                 "is_active":True
             }
         )
@@ -277,6 +279,7 @@ class correlation_inspector:
             data_frame_to_set["min_correl"]=np.amin(correl_data_to_eval,1)
             data_frame_to_set["min_idx"]=[idx_to_correlate_against[i] for i in np.argmin(correl_data_to_eval,1)]
             data_frame_to_set["min_name"]=[self.fields[i] for i in data_frame_to_set["min_idx"]]
+            data_frame_to_set["max_abs_correl"]=np.maximum(data_frame_to_set["max_correl"],-data_frame_to_set["min_correl"])
     def create_tabulator(self,active=True):
         #make only the is_active tab editable for the user
         immutable_fields=[field for field in self.correl_overview_dataframe.columns.values.tolist() if field not in {"is_active"}]
