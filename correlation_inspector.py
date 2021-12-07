@@ -53,20 +53,30 @@ class correlation_inspector:
     
     def on_hover(self,event):
         if event.inaxes is self.scatter_ax:
-            scatterpoint_on_hover,coords_hovered_point=self.get_scatter_point_hovered((event.xdata,event.ydata))
+            scatterpoint_idx_on_hover,coords_hovered_point=self.get_scatter_point_hovered((event.xdata,event.ydata))
             #text.set_text(f"hovering over{scatterpoint_on_hover}")
             #self.msg(f"hovering over point {scatterpoint_on_hover}, at pos {coords_hovered_point}")
-            if scatterpoint_on_hover:
+            if scatterpoint_idx_on_hover:
                 #print(f"highlighting point:{scatterpoint_on_hover}")
-                self.highlight_hovered_point(coords_hovered_point)
+                self.highlight_hovered_point(coords_hovered_point,scatterpoint_idx_on_hover)
         
-    def highlight_hovered_point(self,coords):
+    def highlight_hovered_point(self,coords,idx):
+        #coords in data coordinate 
+        self.mark_point_red(coords)
+        self.annotate_point(coords,idx)
+    def annotate_point(self,coords,idx):
+        if hasattr(self, "last_anot"):
+            self.last_anot.remove()
+        
+        self.last_anot=self.scatter_ax.annotate(f"{idx}",coords)#bbox=dict(boxstyle="round",facecolor='wheat')
+
+    def mark_point_red(self,coords):
         
         if hasattr(self, "last_scatter"):
-            #self.msg("removing scatter")
             self.last_scatter.remove()
         #text.set_text(f"scattering_coords:{[coords[0],coords[1]]}")
         self.last_scatter=self.scatter_ax.scatter(coords[0],coords[1],c=np.array([1,0,0]).reshape((1,3)))
+
     def get_scatter_point_hovered(self,cursor_pos):
         #cursor_pos in data coordinates
         #transform to display coords
@@ -189,8 +199,8 @@ class correlation_inspector:
     def calc_correl(self):
         return np.corrcoef(self.data)
     def plot_scatter(self):
-        
-        self.scatter_ax.clear()
+        for artist in self.scatter_ax.collections:
+            artist.remove()
         if any(i is None for i in self.idxs_to_scatter):
             return
         #self.msg(f"xidx={xidx},yidx={self.idxs_to_scatter[1]}")
@@ -198,7 +208,7 @@ class correlation_inspector:
         name_y=self.fields[self.idxs_to_scatter[1]]
         xdata=self.data[self.idxs_to_scatter[0],:]
         ydata=self.data[self.idxs_to_scatter[1],:]
-        self.scatter_points=self.scatter_ax.scatter(xdata,ydata)
+        self.scatter_points=self.scatter_ax.scatter(xdata,ydata,c="blue")
 
         #self.msg(f"printing x,{xdat} vs y,{ydat}")
         self.scatter_ax.set_xlabel(f"{name_x}, row:{self.idxs_to_scatter[0]}")
@@ -289,18 +299,20 @@ class correlation_inspector:
         rows_to_use=self.get_active_rows() if active else self.get_inactive_rows()
         
         return pn.widgets.Tabulator(self.correl_overview_dataframe.iloc[rows_to_use,:],frozen_columns=[0,1],
-            editors=editors_to_use,formatters=formatters_to_use
-        )
+            editors=editors_to_use,formatters=formatters_to_use),rows_to_use
     def show_spreadsheet_view(self):
         if not hasattr(self,"correl_overview_dataframe"):
             self.correl_overview_dataframe=self.allocate_empty_overview_df()
         self.calc_correl_overview()
         for active in [False,True]:
-            tabulator=self.create_tabulator(active)
+            tabulator,rows_used=self.create_tabulator(active)
             if active:
                 print("active variables:")
+                self.active_tabulator=tabulator
             else:
                 print("inactive variables:")
+                self.inactive_tabulator=tabulator
+            tabulator.style.apply(lambda x: ['background: lightgreen' if rows_used[x.name]<self.nr_inputs else 'background: #FFA07A' for i in x], axis=1)
             display(tabulator)
     def create_layout(self):
         #create figure
@@ -309,7 +321,7 @@ class correlation_inspector:
 
          #create axes 0 for plotting correlation-plot
         ax0=fig.add_subplot(spec[0])
-        ax0.set_title(f"{self.inspectkey}+Click to inspect Scatter plot")
+        ax0.set_title(f"{self.inspectkey}+Click to inspect")
         ax1=fig.add_subplot(spec[1])
         #ax1.set_title(f"{self.inspectkey}+Click to inspect images of calculation")
         fig.canvas.mpl_connect('button_press_event', self.on_click)
