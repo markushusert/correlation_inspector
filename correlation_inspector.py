@@ -2,14 +2,17 @@ import numpy as np
 import matplotlib.pyplot as plt
 import math
 import datetime
+import pandas as pd
 import sys
 import ipywidgets as widgets
 from IPython.display import display
 import glob
+import bokeh
 from functools import wraps
 from PIL import Image
 from ipywidgets import interact, interactive, fixed, interact_manual
-
+import panel as pn
+pn.extension("tabulator")
 
 g_in_jupyter='ipykernel' in sys.modules
 def row_vectorize(f):
@@ -25,17 +28,23 @@ def distance(row,point):
     return math.sqrt((row[0]-point[0])**2+(row[1]-point[1])**2)
 
 class correlation_inspector:
-    def __init__(self,data,fields,inspectkey="control",image_path=None):
+    def __init__(self,data,fields,nr_inputs,inspectkey="control",image_path=None):
+        if data.shape[0]!=len(fields):
+            raise ValueError("fields and first dimension of data need to have same length")
         self.data=data
         self.text=None
         self.scatter_points=None
+        self.nr_inputs=nr_inputs
+        self.nr_outputs=data.shape[0]-nr_inputs
         self.fields=fields
         self.image_path=image_path
         self.cor_coef=self.calc_correl()
         self.inspectkey=inspectkey
         self.key_pressed=False
         self.displayed_images=list()
-        self.figure,self.matshow_ax,self.scatter_ax=self.create_interactive_correlation_fig()
+        self.figure,self.matshow_ax,self.scatter_ax=self.create_layout()
+        self.matshow_ax.matshow(self.get_cor_coef())
+        #self.figure,self.matshow_ax,self.scatter_ax=self.create_interactive_correlation_fig()
         self.idxs_to_scatter=[None,None]
         if not g_in_jupyter:
             self.figure.show()
@@ -151,7 +160,7 @@ class correlation_inspector:
 
     def create_dropdown_widget(self,idx_nr):
         axis_to_set="x-axis" if idx_nr==0 else "y-axis"
-        list_tuples_field_and_nr=[(field,nr) for nr,field in enumerate(self.fields)]
+        list_tuples_field_and_nr=[(f"{nr}:{field}",nr) for nr,field in enumerate(self.fields)]
         return widgets.Dropdown(options=list_tuples_field_and_nr,description=f'{axis_to_set}:')
     def create_swap_button(self):
         tooltip="swaps x- and y-Axis of Scaterplot"
@@ -209,15 +218,94 @@ class correlation_inspector:
         #self.msg(f"setting lims:{[minx-fac*rangex,maxx+fac*rangex]}")
         axes.set_xlim(minx-fac*rangex,maxx+fac*rangex)
         axes.set_ylim(miny-fac*rangey,maxy+fac*rangey)
-
-    def create_interactive_correlation_fig(self):
+    def get_nr_inputs(self):
+        #TODO later account for filtered rows/cols
+        return self.nr_inputs
+    def get_cor_coef(self):
+        #TODO later disable filtered rows/cols
+        return self.cor_coef
+    def get_active_inputs(self):
+        #TODO later account for filtered rows/cols
+        return list(range(self.nr_inputs))
+    def get_active_rows(self):
+        #TODO later account for filtered rows/cols
+        return list(range(len(self.fields)))
+    def get_inactive_rows(self):
+        #TODO later account for filtered rows/cols
+        return list()
+    def get_active_ouputs(self):
+        #TODO later account for filtered rows/cols
+        return list(range(self.nr_inputs,self.cor_coef.shape[0]))
+    def allocate_empty_overview_df(self):
+        return pd.DataFrame(
+            {
+                "name":self.fields,
+                "idx":[i for i in range(len(self.fields))],
+                "max_correl":0.0,
+                "max_idx":0,
+                "max_name":"",
+                "min_correl":0.0,
+                "min_idx":0,
+                "min_name":"",
+                "is_active":True
+            }
+        )
+    def calc_correl_overview(self):
+        if not hasattr(self,"correl_overview_dataframe"):
+            raise Exception(f"dataframe does not exist as attribute of {self}")
+        active_outputs=self.get_active_ouputs()
+        active_inputs=self.get_active_inputs()
+        #correl_input_to_output: rows contain ALL available inputs, cols contain ONLY active outputs
+        correl_input_to_output=self.get_cor_coef()[:self.nr_inputs,active_outputs]
+        #correl_input_to_output: rows contain ALL available outputs, cols contain ONLY active inputs
+        correl_output_to_input=self.get_cor_coef()[self.nr_inputs:,active_inputs]
+        for i in range(2):
+            if i==0:
+                #evaluate input data
+                data_frame_to_set=self.correl_overview_dataframe[:][:self.nr_inputs]
+                correl_data_to_eval=correl_input_to_output
+                idx_to_correlate_against=active_outputs
+            elif i==1:
+                #evaluate output data
+                data_frame_to_set=self.correl_overview_dataframe[:][self.nr_inputs:]
+                correl_data_to_eval=correl_output_to_input
+                idx_to_correlate_against=active_inputs
+            #later
+            data_frame_to_set["max_correl"]=np.amax(correl_data_to_eval,1)
+            data_frame_to_set["max_idx"]=[idx_to_correlate_against[i] for i in np.argmax(correl_data_to_eval,1)]
+            data_frame_to_set["max_name"]=[self.fields[i] for i in data_frame_to_set["max_idx"]]
+            data_frame_to_set["min_correl"]=np.amin(correl_data_to_eval,1)
+            data_frame_to_set["min_idx"]=[idx_to_correlate_against[i] for i in np.argmin(correl_data_to_eval,1)]
+            data_frame_to_set["min_name"]=[self.fields[i] for i in data_frame_to_set["min_idx"]]
+    def create_tabulator(self,active=True):
+        #make only the is_active tab editable for the user
+        immutable_fields=[field for field in self.correl_overview_dataframe.columns.values.tolist() if field not in {"is_active"}]
+        editors_to_use={name:bokeh.models.widgets.tables.CellEditor() for name in immutable_fields}
+        formatters_to_use={"is_active":{"type":"tickCross"}}
+        
+        rows_to_use=self.get_active_rows() if active else self.get_inactive_rows()
+        
+        return pn.widgets.Tabulator(self.correl_overview_dataframe.iloc[rows_to_use,:],frozen_columns=[0,1],
+            editors=editors_to_use,formatters=formatters_to_use
+        )
+    def show_spreadsheet_view(self):
+        if not hasattr(self,"correl_overview_dataframe"):
+            self.correl_overview_dataframe=self.allocate_empty_overview_df()
+        self.calc_correl_overview()
+        for active in [False,True]:
+            tabulator=self.create_tabulator(active)
+            if active:
+                print("active variables:")
+            else:
+                print("inactive variables:")
+            display(tabulator)
+    def create_layout(self):
         #create figure
         fig=plt.figure(constrained_layout=True)
         spec = fig.add_gridspec(ncols=2, nrows=1)
 
          #create axes 0 for plotting correlation-plot
         ax0=fig.add_subplot(spec[0])
-        ax0.matshow(self.cor_coef)
         ax0.set_title(f"{self.inspectkey}+Click to inspect Scatter plot")
         ax1=fig.add_subplot(spec[1])
         #ax1.set_title(f"{self.inspectkey}+Click to inspect images of calculation")
@@ -226,3 +314,6 @@ class correlation_inspector:
         fig.canvas.mpl_connect('key_press_event', self.on_key_press)
         fig.canvas.mpl_connect('key_release_event', self.on_key_release)
         return fig,ax0,ax1
+
+    
+        
