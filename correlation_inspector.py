@@ -145,7 +145,7 @@ class correlation_inspector:
             self.displayed_images.append(Image.open(image_path))
             self.displayed_images[-1].show()
     
-    def scatter_dropdown_interact_x(self,idx_val,idx_nr):
+    def scatter_dropdown_interact(self,idx_val,idx_nr):
         self.idxs_to_scatter[idx_nr]=idx_val
         self.plot_scatter()
 
@@ -153,16 +153,28 @@ class correlation_inspector:
         axis_to_set="x-axis" if idx_nr==0 else "y-axis"
         list_tuples_field_and_nr=[(field,nr) for nr,field in enumerate(self.fields)]
         return widgets.Dropdown(options=list_tuples_field_and_nr,description=f'{axis_to_set}:')
-
+    def create_swap_button(self):
+        tooltip="swaps x- and y-Axis of Scaterplot"
+        button=widgets.Button(description='Swap',button_style='',tooltip=tooltip)
+        button.on_click(self.swap_fun)
+        display(button)
+    def swap_fun(self,button):
+        #self.idxs_to_scatter.reverse()
+        temp=self.dropdown_widgets[0].value
+        self.dropdown_widgets[0].value=self.dropdown_widgets[1].value
+        self.dropdown_widgets[1].value=temp
+        self.plot_scatter()
+        
 
     def display_field_selection_dropdown(self):
         if not g_in_jupyter:
             return
         #for both x and y axis
+        self.dropdown_widgets=[]
         for idx_nr in range(2):
-            dropdown_widget=self.create_dropdown_widget(idx_nr)
-            interact(self.scatter_dropdown_interact_x,idx_val=dropdown_widget,idx_nr=fixed(idx_nr))
-            
+            self.dropdown_widgets.append(self.create_dropdown_widget(idx_nr))
+            interact(self.scatter_dropdown_interact,idx_val=self.dropdown_widgets[-1],idx_nr=fixed(idx_nr))
+        self.swap_button=self.create_swap_button()
 
     
     def calc_correl(self):
