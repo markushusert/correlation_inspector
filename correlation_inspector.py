@@ -134,6 +134,8 @@ class correlation_inspector:
         yidx_clicked=int(round(event.ydata))
         self.idxs_to_scatter[0]=self.get_active_fields()[xidx_clicked]
         self.idxs_to_scatter[1]=self.get_active_fields()[yidx_clicked]
+        self.dropdown_widgets[0].value=self.idxs_to_scatter[0]
+        self.dropdown_widgets[1].value=self.idxs_to_scatter[1]
         self.plot_scatter()
     def clicked_on_scatter(self,event):
         clicked_idx,coords=self.get_scatter_point_hovered((event.xdata,event.ydata))
@@ -171,10 +173,12 @@ class correlation_inspector:
     def scatter_dropdown_interact(self,idx_val,idx_nr):
         self.idxs_to_scatter[idx_nr]=idx_val
         self.plot_scatter()
-
+    def options_for_widget(self):
+        active_field_labels=[self.fields[i] for i in self.get_active_fields()]
+        return [(f"{self.get_active_fields()[nr]}:{field}",nr) for nr,field in enumerate(active_field_labels)]
     def create_dropdown_widget(self,idx_nr):
         axis_to_set="x-axis" if idx_nr==0 else "y-axis"
-        list_tuples_field_and_nr=[(f"{nr}:{field}",nr) for nr,field in enumerate(self.fields)]
+        list_tuples_field_and_nr=self.options_for_widget()
         return widgets.Dropdown(options=list_tuples_field_and_nr,description=f'{axis_to_set}:')
     def create_swap_button(self):
         tooltip="swaps x- and y-Axis of Scaterplot"
@@ -186,8 +190,7 @@ class correlation_inspector:
         temp=self.dropdown_widgets[0].value
         self.dropdown_widgets[0].value=self.dropdown_widgets[1].value
         self.dropdown_widgets[1].value=temp
-        self.plot_scatter()
-        
+        self.plot_scatter()   
 
     def display_field_selection_dropdown(self):
         if not g_in_jupyter:
@@ -196,9 +199,9 @@ class correlation_inspector:
         self.dropdown_widgets=[]
         for idx_nr in range(2):
             self.dropdown_widgets.append(self.create_dropdown_widget(idx_nr))
-            interact(self.scatter_dropdown_interact,idx_val=self.dropdown_widgets[-1],idx_nr=fixed(idx_nr))
+            to_display=interactive(self.scatter_dropdown_interact,idx_val=self.dropdown_widgets[-1],idx_nr=fixed(idx_nr))
+            display(to_display)
         self.swap_button=self.create_swap_button()
-
     
     def calc_correl(self):
         return np.corrcoef(self.data)
@@ -237,7 +240,9 @@ class correlation_inspector:
         self.is_field_active=list(new_list)
         self.active_fields=[i for i in range(len(self.fields)) if new_list[i]]
         self.inactive_fields=[i for i in range(len(self.fields)) if not new_list[i]]
-
+        if hasattr(self,"dropdown_widgets"):
+            for widget in self.dropdown_widgets:
+                widget.options=self.options_for_widget()
     def get_nr_inputs(self):
         return self.nr_inputs
     def get_cor_coef(self):
