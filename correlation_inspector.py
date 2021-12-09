@@ -49,13 +49,10 @@ class correlation_inspector:
         self.set_is_field_active_list([True for i in range(len(fields))])
         
         self.matshow_ax.matshow(self.get_cor_coef())
-        
-        #self.figure,self.matshow_ax,self.scatter_ax=self.create_interactive_correlation_fig()
-        
+                
         if not g_in_jupyter:
             self.figure.show()
         self.display_field_selection_dropdown()
-        #self.msg(f"looking for {self.inspectkey}")
     
     def on_hover(self,event):
         if event.inaxes is self.scatter_ax:
@@ -80,7 +77,6 @@ class correlation_inspector:
         
         if hasattr(self, "last_scatter"):
             self.last_scatter.remove()
-        #text.set_text(f"scattering_coords:{[coords[0],coords[1]]}")
         self.last_scatter=self.scatter_ax.scatter(coords[0],coords[1],c=np.array([1,0,0]).reshape((1,3)))
 
     def get_scatter_point_hovered(self,cursor_pos):
@@ -241,30 +237,18 @@ class correlation_inspector:
         self.is_field_active=list(new_list)
         self.active_fields=[i for i in range(len(self.fields)) if new_list[i]]
         self.inactive_fields=[i for i in range(len(self.fields)) if not new_list[i]]
-        if hasattr(self,"correl_overview_dataframe"):
-            self.correl_overview_dataframe["is_active"]=self.is_field_active
-        
-        self.row_global_to_row_tabulator=[None for i in new_list]
-        for list1 in (self.active_fields,self.inactive_fields):
-            for idx,val in enumerate(list1):
-                self.row_global_to_row_tabulator[val]=idx
+
     def get_nr_inputs(self):
-        #TODO later account for filtered rows/cols
         return self.nr_inputs
     def get_cor_coef(self):
-        #TODO later disable filtered rows/cols
         return self.cor_coef[self.get_active_fields(),:][:,self.get_active_fields()]
     def get_active_inputs(self):
-        #TODO later account for filtered rows/cols
         return [i for i in self.active_fields if i < self.nr_inputs]
     def get_active_fields(self):
-        #TODO later account for filtered rows/cols
         return self.active_fields
     def get_inactive_fields(self):
-        #TODO later account for filtered rows/cols
         return self.inactive_fields
     def get_active_ouputs(self):
-        #TODO later account for filtered rows/cols
         return [i for i in self.active_fields if i >= self.nr_inputs]
     def allocate_empty_overview_df(self):
         return pd.DataFrame(
@@ -314,21 +298,15 @@ class correlation_inspector:
         #make only the is_active tab editable for the user
         immutable_fields=[field for field in self.correl_overview_dataframe.columns.values.tolist() if field not in {"is_active"}]
         editors_to_use={name:bokeh.models.widgets.tables.CellEditor() for name in immutable_fields}
-        formatters_to_use={"is_active":{"type":"tickCross"}}
-        
-        rows_to_use=self.get_active_fields() if active else self.get_inactive_fields()
-        
-        return pn.widgets.Tabulator(self.correl_overview_dataframe.iloc[rows_to_use,:],frozen_columns=[0,1],
-            editors=editors_to_use,formatters=formatters_to_use),rows_to_use
-    def update_active_fields(self):
+        formatters_to_use={"is_active":{"type":"tickCross"}}        
+        return pn.widgets.Tabulator(self.correl_overview_dataframe,frozen_columns=[0],
+            editors=editors_to_use,formatters=formatters_to_use)
+    def update_active_fields(self,*args):#use *args to allow passing button as arg which is required by widget
         #read active fields from dataframe
-        #row_global_to_row_tabulator
-        active_fields=[self.active_tabulator.value["is_active"][tab_row] if self.is_field_active[row] else self.inactive_tabulator.value["is_active"][tab_row] for row,tab_row in enumerate(self.row_global_to_row_tabulator)]
-        print(f"active_fields={active_fields}")
-        #active_fields=self.correl_overview_dataframe["is_active"]
+        active_fields=self.correl_overview_dataframe["is_active"]
         self.set_is_field_active_list(active_fields)
         self.matshow_ax.matshow(self.get_cor_coef())
-        self.show_spreadsheet_view()
+
     def create_update_button(self):
         tooltip="updates correlation_plot to only show active fields"
         button=widgets.Button(description='Update',button_style='',tooltip=tooltip)
@@ -336,28 +314,16 @@ class correlation_inspector:
         display(button)
     def show_spreadsheet_view(self):
         if not hasattr(self,"correl_overview_dataframe"):
-            print("allocating dataframe")
             self.correl_overview_dataframe=self.allocate_empty_overview_df()
         self.calc_correl_overview()
         self.create_update_button()
         
-        for active in [True,False]:
-            tabulator,rows_used=self.create_tabulator(active)
-            if active:
-                print("active variables:")
-                self.active_tabulator=tabulator
-            else:
-                print("inactive variables:")
-                self.inactive_tabulator=tabulator
-            #color rows green for inputs and red for outputs
-            
-            def fmt_fun(x):
-                #print(f"rows_used={rows_used}")
-                #print(f"xname:{x.name}")
-                return ['background: lightgreen' if x.name<self.nr_inputs else 'background: #FFA07A' for i in x]
-            #fmt_fun=lambda x: 
-            tabulator.style.apply(fmt_fun, axis=1)
-            display(tabulator)
+        self.tabulator=self.create_tabulator()
+        #color rows green for inputs and red for outputs
+        def fmt_fun(x):
+            return ['background: lightgreen' if x.name<self.nr_inputs else 'background: #FFA07A' for i in x]
+        self.tabulator.style.apply(fmt_fun, axis=1)
+        display(self.tabulator)
     def create_layout(self):
         #create figure
         fig=plt.figure(constrained_layout=True)
