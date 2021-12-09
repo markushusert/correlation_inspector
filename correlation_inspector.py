@@ -31,21 +31,27 @@ class correlation_inspector:
     def __init__(self,data,fields,nr_inputs,inspectkey="control",image_path=None):
         if data.shape[0]!=len(fields):
             raise ValueError("fields and first dimension of data need to have same length")
+        #setting of data attributes
         self.data=data
+        self.cor_coef=self.calc_correl()
         self.text=None
         self.scatter_points=None
         self.nr_inputs=nr_inputs
         self.nr_outputs=data.shape[0]-nr_inputs
         self.fields=fields
         self.image_path=image_path
-        self.cor_coef=self.calc_correl()
         self.inspectkey=inspectkey
         self.key_pressed=False
         self.displayed_images=list()
         self.figure,self.matshow_ax,self.scatter_ax=self.create_layout()
-        self.matshow_ax.matshow(self.get_cor_coef())
-        #self.figure,self.matshow_ax,self.scatter_ax=self.create_interactive_correlation_fig()
         self.idxs_to_scatter=[None,None]
+        #need to set active_fields_list before plotting
+        self.set_is_field_active_list([True for i in range(len(fields))])
+        
+        self.matshow_ax.matshow(self.get_cor_coef())
+        
+        #self.figure,self.matshow_ax,self.scatter_ax=self.create_interactive_correlation_fig()
+        
         if not g_in_jupyter:
             self.figure.show()
         self.display_field_selection_dropdown()
@@ -128,8 +134,10 @@ class correlation_inspector:
         else:
             print(txt)
     def clicked_on_correl(self,event):
-        self.idxs_to_scatter[0]=int(round(event.xdata))
-        self.idxs_to_scatter[1]=int(round(event.ydata))
+        xidx_clicked=int(round(event.xdata))
+        yidx_clicked=int(round(event.ydata))
+        self.idxs_to_scatter[0]=self.get_active_fields()[xidx_clicked]
+        self.idxs_to_scatter[1]=self.get_active_fields()[yidx_clicked]
         self.plot_scatter()
     def clicked_on_scatter(self,event):
         clicked_idx,coords=self.get_scatter_point_hovered((event.xdata,event.ydata))
@@ -228,24 +236,36 @@ class correlation_inspector:
         #self.msg(f"setting lims:{[minx-fac*rangex,maxx+fac*rangex]}")
         axes.set_xlim(minx-fac*rangex,maxx+fac*rangex)
         axes.set_ylim(miny-fac*rangey,maxy+fac*rangey)
+    def set_is_field_active_list(self,new_list):
+        #new_list=iterable of bool, size of self.fields
+        self.is_field_active=list(new_list)
+        self.active_fields=[i for i in range(len(self.fields)) if new_list[i]]
+        self.inactive_fields=[i for i in range(len(self.fields)) if not new_list[i]]
+        if hasattr(self,"correl_overview_dataframe"):
+            self.correl_overview_dataframe["is_active"]=self.is_field_active
+        
+        self.row_global_to_row_tabulator=[None for i in new_list]
+        for list1 in (self.active_fields,self.inactive_fields):
+            for idx,val in enumerate(list1):
+                self.row_global_to_row_tabulator[val]=idx
     def get_nr_inputs(self):
         #TODO later account for filtered rows/cols
         return self.nr_inputs
     def get_cor_coef(self):
         #TODO later disable filtered rows/cols
-        return self.cor_coef
+        return self.cor_coef[self.get_active_fields(),:][:,self.get_active_fields()]
     def get_active_inputs(self):
         #TODO later account for filtered rows/cols
-        return list(range(self.nr_inputs))
-    def get_active_rows(self):
+        return [i for i in self.active_fields if i < self.nr_inputs]
+    def get_active_fields(self):
         #TODO later account for filtered rows/cols
-        return list(range(len(self.fields)))
-    def get_inactive_rows(self):
+        return self.active_fields
+    def get_inactive_fields(self):
         #TODO later account for filtered rows/cols
-        return list()
+        return self.inactive_fields
     def get_active_ouputs(self):
         #TODO later account for filtered rows/cols
-        return list(range(self.nr_inputs,self.cor_coef.shape[0]))
+        return [i for i in self.active_fields if i >= self.nr_inputs]
     def allocate_empty_overview_df(self):
         return pd.DataFrame(
             {
@@ -268,9 +288,9 @@ class correlation_inspector:
         active_outputs=self.get_active_ouputs()
         active_inputs=self.get_active_inputs()
         #correl_input_to_output: rows contain ALL available inputs, cols contain ONLY active outputs
-        correl_input_to_output=self.get_cor_coef()[:self.nr_inputs,active_outputs]
+        correl_input_to_output=self.cor_coef[:self.nr_inputs,active_outputs]
         #correl_input_to_output: rows contain ALL available outputs, cols contain ONLY active inputs
-        correl_output_to_input=self.get_cor_coef()[self.nr_inputs:,active_inputs]
+        correl_output_to_input=self.cor_coef[self.nr_inputs:,active_inputs]
         for i in range(2):
             if i==0:
                 #evaluate input data
@@ -296,15 +316,32 @@ class correlation_inspector:
         editors_to_use={name:bokeh.models.widgets.tables.CellEditor() for name in immutable_fields}
         formatters_to_use={"is_active":{"type":"tickCross"}}
         
-        rows_to_use=self.get_active_rows() if active else self.get_inactive_rows()
+        rows_to_use=self.get_active_fields() if active else self.get_inactive_fields()
         
         return pn.widgets.Tabulator(self.correl_overview_dataframe.iloc[rows_to_use,:],frozen_columns=[0,1],
             editors=editors_to_use,formatters=formatters_to_use),rows_to_use
+    def update_active_fields(self):
+        #read active fields from dataframe
+        #row_global_to_row_tabulator
+        active_fields=[self.active_tabulator.value["is_active"][tab_row] if self.is_field_active[row] else self.inactive_tabulator.value["is_active"][tab_row] for row,tab_row in enumerate(self.row_global_to_row_tabulator)]
+        print(f"active_fields={active_fields}")
+        #active_fields=self.correl_overview_dataframe["is_active"]
+        self.set_is_field_active_list(active_fields)
+        self.matshow_ax.matshow(self.get_cor_coef())
+        self.show_spreadsheet_view()
+    def create_update_button(self):
+        tooltip="updates correlation_plot to only show active fields"
+        button=widgets.Button(description='Update',button_style='',tooltip=tooltip)
+        button.on_click(self.update_active_fields)
+        display(button)
     def show_spreadsheet_view(self):
         if not hasattr(self,"correl_overview_dataframe"):
+            print("allocating dataframe")
             self.correl_overview_dataframe=self.allocate_empty_overview_df()
         self.calc_correl_overview()
-        for active in [False,True]:
+        self.create_update_button()
+        
+        for active in [True,False]:
             tabulator,rows_used=self.create_tabulator(active)
             if active:
                 print("active variables:")
@@ -312,7 +349,14 @@ class correlation_inspector:
             else:
                 print("inactive variables:")
                 self.inactive_tabulator=tabulator
-            tabulator.style.apply(lambda x: ['background: lightgreen' if rows_used[x.name]<self.nr_inputs else 'background: #FFA07A' for i in x], axis=1)
+            #color rows green for inputs and red for outputs
+            
+            def fmt_fun(x):
+                #print(f"rows_used={rows_used}")
+                #print(f"xname:{x.name}")
+                return ['background: lightgreen' if x.name<self.nr_inputs else 'background: #FFA07A' for i in x]
+            #fmt_fun=lambda x: 
+            tabulator.style.apply(fmt_fun, axis=1)
             display(tabulator)
     def create_layout(self):
         #create figure
