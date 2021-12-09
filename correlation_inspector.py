@@ -184,14 +184,21 @@ class correlation_inspector:
         tooltip="swaps x- and y-Axis of Scaterplot"
         button=widgets.Button(description='Swap',button_style='',tooltip=tooltip)
         button.on_click(self.swap_fun)
-        display(button)
+        return button
+    def create_filter_widget(self):
+
+        widget=widgets.FloatText(value=0.0,description="filter by correlation")
+        to_display=interactive(self.filter_fields,lim_abs_correl=widget)
+        return to_display
     def swap_fun(self,button):
         #self.idxs_to_scatter.reverse()
         temp=self.dropdown_widgets[0].value
         self.dropdown_widgets[0].value=self.dropdown_widgets[1].value
         self.dropdown_widgets[1].value=temp
         self.plot_scatter()   
-
+    def filter_fields(self,lim_abs_correl):
+        self.correl_overview_dataframe["is_active"]=self.correl_overview_dataframe["max_abs_correl"]>=lim_abs_correl
+        self.update_active_fields()
     def display_field_selection_dropdown(self):
         if not g_in_jupyter:
             return
@@ -202,7 +209,7 @@ class correlation_inspector:
             to_display=interactive(self.scatter_dropdown_interact,idx_val=self.dropdown_widgets[-1],idx_nr=fixed(idx_nr))
             display(to_display)
         self.swap_button=self.create_swap_button()
-    
+        display(self.swap_button)
     def calc_correl(self):
         return np.corrcoef(self.data)
     def plot_scatter(self):
@@ -240,6 +247,8 @@ class correlation_inspector:
         self.is_field_active=list(new_list)
         self.active_fields=[i for i in range(len(self.fields)) if new_list[i]]
         self.inactive_fields=[i for i in range(len(self.fields)) if not new_list[i]]
+        if hasattr(self,"correl_overview_dataframe"):
+            self.correl_overview_dataframe["is_active"]=self.is_field_active
         if hasattr(self,"dropdown_widgets"):
             for widget in self.dropdown_widgets:
                 widget.options=self.options_for_widget()
@@ -311,18 +320,24 @@ class correlation_inspector:
         active_fields=self.correl_overview_dataframe["is_active"]
         self.set_is_field_active_list(active_fields)
         self.matshow_ax.matshow(self.get_cor_coef())
+        #self.show_tabulator()
 
     def create_update_button(self):
         tooltip="updates correlation_plot to only show active fields"
         button=widgets.Button(description='Update',button_style='',tooltip=tooltip)
         button.on_click(self.update_active_fields)
-        display(button)
+        return button
     def show_spreadsheet_view(self):
         if not hasattr(self,"correl_overview_dataframe"):
             self.correl_overview_dataframe=self.allocate_empty_overview_df()
         self.calc_correl_overview()
-        self.create_update_button()
-        
+        self.filter_widget=self.create_filter_widget()
+        display(self.filter_widget)
+        self.update_button=self.create_update_button()
+        display(self.update_button)
+
+        self.show_tabulator()
+    def show_tabulator(self):
         self.tabulator=self.create_tabulator()
         #color rows green for inputs and red for outputs
         def fmt_fun(x):
