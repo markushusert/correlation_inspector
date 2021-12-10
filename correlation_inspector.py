@@ -497,6 +497,23 @@ class correlation_inspector:
         button=widgets.Button(description='Update',button_style='',tooltip=tooltip)
         button.on_click(self.update_active_fields)
         return button
+    def print_highest_calculation(self,idx,n=5):
+        """
+        prints the n highest correlation partners of the field specified by idx
+        """
+        if idx<self.nr_inputs:
+            to_eval=np.abs(self.cor_coef)[idx,self.nr_inputs:]#evaluate given input vs all outputs
+            offset=self.nr_inputs
+        else:
+            to_eval=np.abs(self.cor_coef)[idx,:self.nr_inputs]#evaluate given output vs all inputs
+            offset=0
+        #print(to_eval)
+        highest_idx=np.argpartition(to_eval,-n)[-n:]
+        #print(highest_idx)
+        highest_idx=highest_idx[np.argsort(to_eval[highest_idx])]+offset#sort indizes low to high
+        for i in highest_idx:
+            print(f"correlation to field {i}:{self.fieldnames[i]} is {self.cor_coef[idx,i]}")
+
     def show_spreadsheet_view(self):
         """
         calculates the correlation-overview-DataFrame and displays it alongside
