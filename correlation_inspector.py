@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib as mpl
 import math
 import datetime
 import pandas as pd
@@ -64,7 +65,7 @@ class correlation_inspector:
             scatterpoint_idx_on_hover,coords_hovered_point=self.get_scatter_point_hovered((event.xdata,event.ydata))
             #text.set_text(f"hovering over{scatterpoint_on_hover}")
             #self.msg(f"hovering over point {scatterpoint_on_hover}, at pos {coords_hovered_point}")
-            if scatterpoint_idx_on_hover:
+            if scatterpoint_idx_on_hover is not None:
                 #print(f"highlighting point:{scatterpoint_on_hover}")
                 self.highlight_hovered_point(coords_hovered_point,scatterpoint_idx_on_hover)
         
@@ -73,7 +74,8 @@ class correlation_inspector:
         coords: iterable of length 2, coordinates of point in data-coordinate-system
         idx: idx of point, indicating the number of the calculation it belongs to
         """
-        #coords in data coordinate 
+        #coords in data coordinate
+        print(f"highlighting point with coords {coords} at idx {idx}")
         self.mark_point_red(coords)
         self.annotate_point(coords,idx)
     def annotate_point(self,coords,idx):
@@ -84,7 +86,8 @@ class correlation_inspector:
         idx: idx of point, indicating the number of the calculation it belongs to
         """
         if hasattr(self, "last_anot"):
-            self.last_anot.remove()
+            if self.last_anot.get_figure():
+                self.last_anot.remove()
         
         self.last_anot=self.scatter_ax.annotate(f"{idx}",coords)#bbox=dict(boxstyle="round",facecolor='wheat')
 
@@ -93,7 +96,8 @@ class correlation_inspector:
         highlight the scatterpoint by ploting a red point at its exact position
         """
         if hasattr(self, "last_scatter"):
-            self.last_scatter.remove()
+            if self.last_scatter.get_figure():#only if last scatter has not been deleted after redrawing plot
+                self.last_scatter.remove()
         self.last_scatter=self.scatter_ax.scatter(coords[0],coords[1],c=np.array([1,0,0]).reshape((1,3)))
 
     def get_scatter_point_hovered(self,cursor_pos):
@@ -123,6 +127,7 @@ class correlation_inspector:
         size_of_closest_point=scattersizes if (scattersizes.size==1) else scattersizes[closest_scatter_idx]
         lim=math.sqrt(size_of_closest_point)
         #print(f"distance={distance},lim={lim}")
+        print(f"point {closest_scatter_idx},coords {scatter_cords_data[closest_scatter_idx,:]},distance={distance},lim={lim}")
         if distance<lim:
             return closest_scatter_idx,scatter_cords_data[closest_scatter_idx,:]
         return (None,None)
@@ -312,13 +317,18 @@ class correlation_inspector:
         data-cols stand for a specimen
         """
         return np.corrcoef(self.data)
-    def plot_scatter(self):
+    def plot_scatter(self,ret=False):
         """
         draws a scatter plot of 2 currently selected fields against each other
         """
         #remove any old scatterplots
-        for artist in self.scatter_ax.collections:
-            artist.remove()
+        while len(self.scatter_ax.collections):
+            self.scatter_ax.collections[0].remove()
+        #remove any old annotations
+        anotations=[i for i in self.scatter_ax.get_children() if isinstance(i,mpl.text.Annotation)]
+        for annot in anotations:
+            annot.remove()
+        if ret: return
         #only proceed if both fields to scatter are given
         if any(i is None for i in self.idxs_to_scatter):
             return
