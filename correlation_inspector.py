@@ -497,7 +497,7 @@ class correlation_inspector:
         button=widgets.Button(description='Update',button_style='',tooltip=tooltip)
         button.on_click(self.update_active_fields)
         return button
-    def print_highest_calculation(self,idx,n=5):
+    def print_highest_correlation(self,idx,n=5):
         """
         prints the n highest correlation partners of the field specified by idx
         """
