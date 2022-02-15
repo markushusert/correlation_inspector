@@ -5,15 +5,35 @@ from functools import wraps
 from IPython.display import display,Markdown
 
 class metamodell:
-	def __init__(self,data,regressor,nr_inputs,evaluate_function,fieldnames=None) -> None:
+	def __init__(self,data,regressor,nr_inputs,evaluate_function,fieldnames=None,outputblocks=None) -> None:
 		self.data=data
 		self.nr_inputs=nr_inputs
+		self.nr_outputs=self.data.shape[1]-nr_inputs
 		self.regressor=regressor
 		self.fieldnames=fieldnames
 		self.evaluate_function=evaluate_function
 
 		self.inputs=data[:,:self.nr_inputs]
 		self.oututs=data[:,self.nr_inputs:]
+
+		#outputblocks describes which groups of outputs shall be fitted together if possible
+		#for example if the argument is (3,3,1)
+		#self.outputblocks will be
+		#[
+		#(0,3)
+		#(3,6)
+		#(6,1)
+		# ]
+		if outputblocks is None:
+			self.outputblocks=[(0,self.nr_outputs)]
+		else:
+			count=0
+			self.outputblocks=[]
+			for blocksize in outputblocks:
+				self.outputblocks.append(count,count+blocksize)
+				count+=blocksize
+			
+
 		self.outputs_need_update=True
 		self.outputnames=[name for i,name in enumerate(self.fieldnames) if i>=self.nr_inputs]
 
@@ -81,7 +101,7 @@ class metamodell:
 		self.outputs_need_update=True
 		return self.idx_train,self.idx_test
 
-def tryout_metamodells(list_name_and_regressor,data,nr_inputs,evaluate_row_func,error_size,metamodell_fields,nr_tries=10,ratio_test=0.25,reduce_functions=[np.amax,np.average]):
+def tryout_metamodells(list_name_and_regressor,data,nr_inputs,evaluate_row_func,error_size,metamodell_fields,nr_tries=10,ratio_test=0.25,reduce_functions=[np.amax,np.average,np.amin]):
 	"""
 	trains different kinds of metamodells on a given dataset and gives statistikal overview which metamodell fits best
 	
@@ -108,6 +128,7 @@ def tryout_metamodells(list_name_and_regressor,data,nr_inputs,evaluate_row_func,
 		for name,Regressor in list_name_and_regressor:
 			modell=metamodell(data,Regressor,nr_inputs,evaluate_row_func,metamodell_fields)
 			modell.split_data(idx_train,idx_test)
+			print(f"training modell:{name}")
 			modell.train()
 			modells.append(modell)
 			modell_names.append(name)
@@ -119,6 +140,7 @@ def tryout_metamodells(list_name_and_regressor,data,nr_inputs,evaluate_row_func,
 			#print(reduce_function.__name__)
 			for iter_modell,(name,modell) in enumerate(zip(modell_names,modells)):
 				#df_modell_error.loc[name]=modell.test(reduce_function)
+				print(f"evaluating modell:{name}")
 				error_data[iter_modell,:,iter_reduce_func,iter_try]=modell.test(reduce_function)
 			#display(df_modell_error)
 	error_data_avg=np.mean(error_data,3)# mean over all tries
@@ -133,4 +155,5 @@ def tryout_metamodells(list_name_and_regressor,data,nr_inputs,evaluate_row_func,
 		std_style=df_std.style.set_caption(f"standart deviation over {nr_tries} different training-sets")
 		display(avg_style)
 		display(std_style)
-	
+def printfun():
+	print("hi i am from your module")
