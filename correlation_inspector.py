@@ -13,6 +13,10 @@ from functools import wraps
 from PIL import Image
 from ipywidgets import interact, interactive, fixed, interact_manual
 import panel as pn
+from collections import OrderedDict
+from pyexcel_ods import save_data
+from pyexcel_ods import get_data
+out=widgets.Output()
 pn.extension("tabulator")
 
 g_in_jupyter='ipykernel' in sys.modules
@@ -29,7 +33,7 @@ def distance(row,point):
     return math.sqrt((row[0]-point[0])**2+(row[1]-point[1])**2)
 
 class correlation_inspector:
-    def __init__(self,data,fields,nr_inputs,inspectkey="control",image_path=None):
+    def __init__(self,data,fields,nr_inputs,inspectkey="control",image_path=None,ods_path=None):
         if data.shape[0]!=len(fields):
             raise ValueError("fields and first dimension of data need to have same length")
         #setting of data attributes
@@ -46,6 +50,13 @@ class correlation_inspector:
         self.displayed_images=list()
         self.figure,self.matshow_ax,self.scatter_ax=self.create_layout()
         self.idxs_to_scatter=[None,None]
+        self.ods_path=ods_path
+        self.marked_correls=np.zeros(self.cor_coef.shape, dtype=bool)#array of only False
+        if ods_path:
+            self.read_ods()
+        else:
+            self.ods_data=OrderedDict()
+            
         #need to set active_fields_list before plotting
         self.set_is_field_active_list([True for i in range(len(fields))])
         
@@ -54,7 +65,17 @@ class correlation_inspector:
         if not g_in_jupyter:
             self.figure.show()
         self.display_field_selection_dropdown()
-    
+    def read_ods(self):
+        self.ods_data=get_data(self.ods_path)
+        for row in self.ods_data.get("Sheet1",list()):
+            if len(row)>=2:
+                if isinstance(row[0], int) and isinstance(row[2], int):        
+                    self.marked_correls[row[0],row[2]]=True
+    def write_ods(self):
+        with out:
+            print(f"writing data:{self.ods_data} to {self.ods_path}")
+        save_data(self.ods_path, self.ods_data)
+
     def on_hover(self,event):
         """
         handles the event of the mouse hovering over the scatterplot
@@ -263,6 +284,39 @@ class correlation_inspector:
         axis_to_set="x-axis" if idx_nr==0 else "y-axis"
         list_tuples_field_and_nr=self.options_for_widget()
         return widgets.Dropdown(options=list_tuples_field_and_nr,description=f'{axis_to_set}:')
+    def update_mark_checkbox_button(self):
+        """
+        updates checkbox when new fields are chosen to be plotted
+        """
+        is_marked=self.marked_correls[self.idxs_to_scatter[0],self.idxs_to_scatter[1]]
+        #temporary unobserve so that self.mark_checkbox_clicked not executed
+        #and nothing written to ods
+        self.checkbox.unobserve(self.mark_checkbox_clicked,names="value")
+        self.checkbox.value=bool(is_marked)
+        self.checkbox.observe(self.mark_checkbox_clicked,names="value")
+    def create_mark_checkbox_button(self):
+        """
+        creates a checkbox which marks import scatter-plots for later evaluation, if not already existent
+        """
+        is_marked=False
+        
+        tooltip="marks import scatter-plots for later evaluation"
+        checkbox=widgets.Checkbox(description='Mark',tooltip=tooltip,value=is_marked)
+        checkbox.observe(self.mark_checkbox_clicked,names='value')
+        return checkbox
+    def mark_checkbox_clicked(self,checkboxdict):
+        self.set_marked_value([self.idxs_to_scatter[0],self.idxs_to_scatter[1]],checkboxdict['owner'].value)
+        self.write_ods()
+    def set_marked_value(self,list_idx,value):
+        self.marked_correls[list_idx[0],list_idx[1]]=value
+        if value==True:#add to marked data
+            new_row=[list_idx[0],self.fieldnames[list_idx[0]],list_idx[1],self.fieldnames[list_idx[1]],float(self.cor_coef[list_idx[0],list_idx[1]])]
+            self.ods_data["Sheet1"].append(new_row)
+        else:#remove from it
+            self.ods_data["Sheet1"]=[row for row in self.ods_data["Sheet1"] if not (len(row)>=2 and row[0]==list_idx[0] and row[2]==list_idx[1])]
+            
+
+
     def create_swap_button(self):
         """
         creates a button which swaps the x and y Axis of the scatterplot
@@ -303,12 +357,15 @@ class correlation_inspector:
             return
         #for both x and y axis
         self.dropdown_widgets=[]
+        to_display=[]
         for idx_nr in range(2):
             self.dropdown_widgets.append(self.create_dropdown_widget(idx_nr))
-            to_display=interactive(self.scatter_dropdown_interact,idx_val=self.dropdown_widgets[-1],idx_nr=fixed(idx_nr))
-            display(to_display)
+            to_display.append(interactive(self.scatter_dropdown_interact,idx_val=self.dropdown_widgets[-1],idx_nr=fixed(idx_nr)))
+            #display(to_display)
         self.swap_button=self.create_swap_button()
-        display(self.swap_button)
+        self.checkbox=self.create_mark_checkbox_button()
+        display(widgets.HBox(to_display))
+        display(widgets.HBox([self.swap_button,self.checkbox]))
     def calc_correl(self):
         """
         calculates correlation coefficients of provided data
@@ -345,7 +402,7 @@ class correlation_inspector:
         self.set_lims(self.scatter_ax,xdata,ydata)
         self.scatter_ax.set_title(f"correlation:{self.cor_coef[self.idxs_to_scatter[0],self.idxs_to_scatter[1]]}")
         #self.scatter_ax.draw()
-
+        self.update_mark_checkbox_button()
     def set_lims(self,axes,xdata,ydata):
         """
         set the limits for the given axes, so that all datapoints can be seen
