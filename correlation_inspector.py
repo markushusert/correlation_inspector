@@ -309,12 +309,19 @@ class correlation_inspector:
         self.write_ods()
     def set_marked_value(self,list_idx,value):
         self.marked_correls[list_idx[0],list_idx[1]]=value
+        def sort_key(row):
+            if len(row)<1 or isinstance(row[0],str) or isinstance(row[2],str):
+                return (0,0)
+            else:
+                return(row[0],row[2])
         if value==True:#add to marked data
             new_row=[list_idx[0],self.fieldnames[list_idx[0]],list_idx[1],self.fieldnames[list_idx[1]],float(self.cor_coef[list_idx[0],list_idx[1]])]
             self.ods_data["Sheet1"].append(new_row)
+            self.ods_data["Sheet1"].sort(key=sort_key)
         else:#remove from it
             self.ods_data["Sheet1"]=[row for row in self.ods_data["Sheet1"] if not (len(row)>=2 and row[0]==list_idx[0] and row[2]==list_idx[1])]
-            
+        
+        
 
 
     def create_swap_button(self):
