@@ -343,6 +343,7 @@ class correlation_inspector:
         self.scatter_ax.set_xlabel(f"{name_x}, row:{self.idxs_to_scatter[0]}")
         self.scatter_ax.set_ylabel(f"{name_y}, row:{self.idxs_to_scatter[1]}")
         self.set_lims(self.scatter_ax,xdata,ydata)
+        self.scatter_ax.set_title(f"correlation:{self.cor_coef[self.idxs_to_scatter[0],self.idxs_to_scatter[1]]}")
         #self.scatter_ax.draw()
 
     def set_lims(self,axes,xdata,ydata):
