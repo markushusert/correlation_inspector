@@ -294,6 +294,28 @@ class correlation_inspector:
         self.checkbox.unobserve(self.mark_checkbox_clicked,names="value")
         self.checkbox.value=bool(is_marked)
         self.checkbox.observe(self.mark_checkbox_clicked,names="value")
+    def group_similar_outputs(self,lim=0.8,reduce_fun=max):
+        """
+        returns list of lists of indices of fields correlated to on another
+        """
+        groups=[[self.nr_inputs]]#already fill first group with first output
+        #thats why start loop at self.nr_inputs+1
+        for i in range(self.nr_inputs+1,self.nr_inputs+self.nr_outputs):
+            correls=[]
+            for group in groups:
+                correls.append(reduce_fun([abs(self.cor_coef[i,j])>lim for j in group]))
+            maxidx=np.argmax(np.array(correls))
+            if correls[maxidx]>lim:
+                groups[maxidx].append(i)
+            else:
+                groups.append([i])
+        return groups
+    def get_highest_input_correl_of_groups(self,groups):
+        correls=[]
+        for group in groups:
+            highest_correl_to_input=np.amax(self.cor_coef[:self.nr_inputs,group])
+            correls.append(highest_correl_to_input)
+        return correls
     def create_mark_checkbox_button(self):
         """
         creates a checkbox which marks import scatter-plots for later evaluation, if not already existent
