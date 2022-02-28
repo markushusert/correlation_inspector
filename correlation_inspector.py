@@ -8,6 +8,8 @@ import sys
 import ipywidgets as widgets
 from IPython.display import display
 import glob
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
 import bokeh
 from functools import wraps
 from PIL import Image
@@ -432,6 +434,54 @@ class correlation_inspector:
         self.scatter_ax.set_title(f"correlation:{self.cor_coef[self.idxs_to_scatter[0],self.idxs_to_scatter[1]]}")
         #self.scatter_ax.draw()
         self.update_mark_checkbox_button()
+    def PCA(self,n_comp,idx_to_compute=None):
+        """
+        performs pca analysis of data in dimensions indicated by idx_to_compute
+        returns n_comp eigenvektors and their eigenvalue of covariance matrix of standardized data
+        n_comp=int
+        idx_to_compute=iterable of int
+        returns 1d-numpy array of length n_comp of varianz-data,2d-numpy array (n_comp,n_dim) eigenvektor of principal componentes
+
+        """
+        if idx_to_compute is None:
+            idx_to_compute=range(self.nr_inputs,self.data.shape[0])
+        X = self.data[idx_to_compute,:].T
+        X = StandardScaler().fit_transform(X)
+        pca = PCA(n_components=n_comp)
+        pca.fit(X)
+        components_projected_to_whole_Dataset=np.empty((n_comp,self.data.T.shape[1]))
+        for i in range(n_comp):
+            components_projected_to_whole_Dataset[i,:]=0.0
+            components_projected_to_whole_Dataset[i,idx_to_compute]=pca.components_[i,:]
+        return pca.explained_variance_ratio_,components_projected_to_whole_Dataset
+    def plot_PCA(self,variance,significant_dimensions,lim=0.7):
+        """
+
+        """
+        nr_components=len(significant_dimensions)
+        fig, axes = plt.subplots(nr_components,1)
+        fig.tight_layout()
+        #plt.subplots_adjust(hspace=0.2)
+        for i,ax in enumerate(axes):
+            belonging_dimensions=significant_dimensions[i]
+            ax.set_title(f"varianz: {variance[i]},dims:{[idx for idx in belonging_dimensions]}")
+            corr_of_dimensions=self.cor_coef[belonging_dimensions,:]
+            corr_of_dimensions=corr_of_dimensions[:,belonging_dimensions]
+            ax.matshow(corr_of_dimensions,vmin=-1,vmax=1)
+
+    def get_significant_dimensions_of_pca_component(self,components,lim):
+        if len(components.shape)==1:#vektor as input, scale to row-vector
+            components_to_use=np.reshape(components,(1,components.size))
+        else:
+            components_to_use=components
+        to_return=[]
+        for i in range(components_to_use.shape[0]):
+            max_load=np.amax(components_to_use[i,:])
+            significant_dims=np.where(components_to_use[i,:]>max_load*lim)[0]
+            load_of_significant_dims=components_to_use[i,significant_dims]
+            significant_dims_sorted=significant_dims[np.argsort(load_of_significant_dims)]
+            to_return.append(significant_dims_sorted)
+        return to_return
     def set_lims(self,axes,xdata,ydata):
         """
         set the limits for the given axes, so that all datapoints can be seen
