@@ -22,6 +22,7 @@ out=widgets.Output()
 pn.extension("tabulator")
 
 g_in_jupyter='ipykernel' in sys.modules
+g_plotsize=9
 def row_vectorize(f):
     @wraps(f)
     def wrapped_f(X,*args,**kwargs):
@@ -161,6 +162,37 @@ class correlation_inspector:
         if distance<lim:
             return closest_scatter_idx,scatter_cords_data[closest_scatter_idx,:]
         return (None,None)
+    def array_of_scatterplots(self,xdims,ydims):
+        #xdims,ydims list of dimensions to plot
+        fig,axes=plt.subplots(len(xdims),len(ydims))
+        
+        for ix in range(len(xdims)):
+            for iy in range(len(ydims)):
+                ax=axes[ix,iy]
+                ydata=self.data.T[:,xdims[ix]]
+                xdata=self.data.T[:,ydims[iy]]
+                ax.scatter(xdata,ydata,s=g_plotsize)
+                ax.tick_params(
+                    axis='both',          # changes apply to the x-axis
+                    which='both',      # both major and minor ticks are affected
+                    bottom=False,      # ticks along the bottom edge are off
+                    top=False,         # ticks along the top edge are off
+                    left=False,
+                    right=False,
+                    labelleft=False,
+                    labelbottom=False) # labels along the bottom edge are off
+                miny=np.amin(ydata)
+                maxy=np.amax(ydata)
+                dy = (maxy - miny)*0.05
+                ax.set_ylim(miny-dy, maxy+dy)
+                print(f"setting ylim:{(miny-dy, maxy+dy)}")
+                
+                minx=np.amin(xdata)
+                maxx=np.amax(xdata)
+                dx = (maxx - minx)*0.05
+                ax.set_xlim(minx-dx, maxx+dx)
+                print(f"setting xlim:{(minx-dx, maxx+dx)}")
+
     def get_closest_point_to_cursor(self,scatterpoints,cursor_pos):
         """
         returns idx and distance scatterpoint closest to the cursor
@@ -442,7 +474,8 @@ class correlation_inspector:
             pass
             #print(colors_to_scat)
         #print(colors_to_scat)
-        self.scatter_points=self.scatter_ax.scatter(xdata,ydata,c=colors_to_scat,s=18)
+        
+        self.scatter_points=self.scatter_ax.scatter(xdata,ydata,c=colors_to_scat,s=g_plotsize)
 
         #self.msg(f"printing x,{xdat} vs y,{ydat}")
         self.scatter_ax.set_xlabel(f"{name_x}, row:{self.idxs_to_scatter[0]}")
