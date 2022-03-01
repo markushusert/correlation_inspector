@@ -35,7 +35,7 @@ def distance(row,point):
     return math.sqrt((row[0]-point[0])**2+(row[1]-point[1])**2)
 
 class correlation_inspector:
-    def __init__(self,data,fields,nr_inputs,inspectkey="control",image_path=None,ods_path=None):
+    def __init__(self,data,fields,nr_inputs,inspectkey="control",image_path=None,ods_path=None,groups=None):
         if data.shape[0]!=len(fields):
             raise ValueError("fields and first dimension of data need to have same length")
         #setting of data attributes
@@ -45,6 +45,10 @@ class correlation_inspector:
         self.scatter_points=None
         self.nr_inputs=nr_inputs
         self.nr_outputs=data.shape[0]-nr_inputs
+        if groups is None:
+            self.groups=[np.arange(data.shape[1])]#one group containing all specimen
+        else:
+            self.groups=groups
         self.fieldnames=fields
         self.image_path=image_path
         self.inspectkey=inspectkey
@@ -84,10 +88,12 @@ class correlation_inspector:
 
         highlights the point being hovered over
         """
+        
         if event.inaxes is self.scatter_ax:
             scatterpoint_idx_on_hover,coords_hovered_point=self.get_scatter_point_hovered((event.xdata,event.ydata))
             #text.set_text(f"hovering over{scatterpoint_on_hover}")
             #self.msg(f"hovering over point {scatterpoint_on_hover}, at pos {coords_hovered_point}")
+            
             if scatterpoint_idx_on_hover is not None:
                 #print(f"highlighting point:{scatterpoint_on_hover}")
                 self.highlight_hovered_point(coords_hovered_point,scatterpoint_idx_on_hover)
@@ -98,7 +104,9 @@ class correlation_inspector:
         idx: idx of point, indicating the number of the calculation it belongs to
         """
         #coords in data coordinate
-        print(f"highlighting point with coords {coords} at idx {idx}")
+        with out:
+            pass
+            #print(f"highlighting point with coords {coords} at idx {idx}")
         self.mark_point_red(coords)
         self.annotate_point(coords,idx)
     def annotate_point(self,coords,idx):
@@ -121,7 +129,8 @@ class correlation_inspector:
         if hasattr(self, "last_scatter"):
             if self.last_scatter.get_figure():#only if last scatter has not been deleted after redrawing plot
                 self.last_scatter.remove()
-        self.last_scatter=self.scatter_ax.scatter(coords[0],coords[1],c=np.array([1,0,0]).reshape((1,3)))
+       
+        self.last_scatter=self.scatter_ax.scatter(coords[0],coords[1],c="r")#
 
     def get_scatter_point_hovered(self,cursor_pos):
         """
@@ -138,14 +147,12 @@ class correlation_inspector:
         cursor_pos=self.scatter_ax.transData.transform(cursor_pos)
         if not len(self.scatter_ax.collections):
             return (None,None)
-        cs=self.scatter_ax.collections[0]
-        cs.set_offset_position('data')
-
         #point coordinates in display coordinates
-        scatter_cords_data=cs.get_offsets()#Nx2 np-array, 1row for each point
+        scatter_cords_data=self.data.T[:,self.idxs_to_scatter]
         scatter_coords_display=self.scatter_ax.transData.transform(scatter_cords_data)
         
         scattersizes=self.scatter_points.get_sizes()
+        #return (None,None)
         closest_scatter_idx,distance=self.get_closest_point_to_cursor(scatter_coords_display,cursor_pos)
         size_of_closest_point=scattersizes if (scattersizes.size==1) else scattersizes[closest_scatter_idx]
         lim=math.sqrt(size_of_closest_point)
@@ -425,7 +432,17 @@ class correlation_inspector:
         name_y=self.fieldnames[self.idxs_to_scatter[1]]
         xdata=self.data[self.idxs_to_scatter[0],:]
         ydata=self.data[self.idxs_to_scatter[1],:]
-        self.scatter_points=self.scatter_ax.scatter(xdata,ydata,c="blue")
+        colourlist=["blue","green","yellow","magenta","Cyan"]
+        colors_to_scat=np.empty(xdata.size,dtype=object)
+        for i,group in enumerate(self.groups):
+            colors_to_scat[group]=colourlist[i]
+        if False:
+            colors_to_scat="blue"
+        with out:
+            pass
+            #print(colors_to_scat)
+        #print(colors_to_scat)
+        self.scatter_points=self.scatter_ax.scatter(xdata,ydata,c=colors_to_scat,s=18)
 
         #self.msg(f"printing x,{xdat} vs y,{ydat}")
         self.scatter_ax.set_xlabel(f"{name_x}, row:{self.idxs_to_scatter[0]}")
