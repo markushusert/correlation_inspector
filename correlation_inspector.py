@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 import matplotlib as mpl
 import math
 import datetime
@@ -169,6 +170,11 @@ class correlation_inspector:
         for ix in range(len(xdims)):
             for iy in range(len(ydims)):
                 ax=axes[ix,iy]
+                if iy==0:
+                    ax.set_ylabel(self.fieldnames[xdims[ix]], rotation=90, size='large')
+                if ix==0:
+                    ax.set_title(self.fieldnames[ydims[iy]])
+
                 ydata=self.data.T[:,xdims[ix]]
                 xdata=self.data.T[:,ydims[iy]]
                 ax.scatter(xdata,ydata,s=g_plotsize)
@@ -185,14 +191,19 @@ class correlation_inspector:
                 maxy=np.amax(ydata)
                 dy = (maxy - miny)*0.05
                 ax.set_ylim(miny-dy, maxy+dy)
-                print(f"setting ylim:{(miny-dy, maxy+dy)}")
+                #print(f"setting ylim:{(miny-dy, maxy+dy)}")
                 
                 minx=np.amin(xdata)
                 maxx=np.amax(xdata)
                 dx = (maxx - minx)*0.05
                 ax.set_xlim(minx-dx, maxx+dx)
-                print(f"setting xlim:{(minx-dx, maxx+dx)}")
+                #print(f"setting xlim:{(minx-dx, maxx+dx)}")
 
+                #prevent scale, 1e^18, from beeing shown
+                ax.xaxis.set_major_formatter(ticker.FormatStrFormatter('%.0e'))
+                ax.yaxis.set_major_formatter(ticker.FormatStrFormatter('%.0e'))
+                #ax.set_title(f"Cor:{round(self.cor_coef[ix,iy],3)}")
+        fig.tight_layout()
     def get_closest_point_to_cursor(self,scatterpoints,cursor_pos):
         """
         returns idx and distance scatterpoint closest to the cursor
@@ -510,7 +521,7 @@ class correlation_inspector:
         """
         nr_components=len(significant_dimensions)
         fig, axes = plt.subplots(nr_components,1)
-        fig.tight_layout()
+        
         #plt.subplots_adjust(hspace=0.2)
         for i,ax in enumerate(axes):
             belonging_dimensions=significant_dimensions[i]
@@ -518,7 +529,7 @@ class correlation_inspector:
             corr_of_dimensions=self.cor_coef[belonging_dimensions,:]
             corr_of_dimensions=corr_of_dimensions[:,belonging_dimensions]
             ax.matshow(corr_of_dimensions,vmin=-1,vmax=1)
-
+        fig.tight_layout()
     def get_significant_dimensions_of_pca_component(self,components,lim):
         if len(components.shape)==1:#vektor as input, scale to row-vector
             components_to_use=np.reshape(components,(1,components.size))
